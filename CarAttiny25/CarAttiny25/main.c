@@ -26,11 +26,16 @@
 #define TRANSM_FREQ 9800
 #define PERIOD_QURT_CICLES F_CPU/TRANSM_FREQ/4
 
+#define PROG_WORD_CHECK 12
+#define ACTIV_WORD_CHECK 7
+#define CONTROLLER_WORD_CHECK 9
+
+/*
 #define PROG_WORD_CHECK 0x1000
 #define PACE_WORD_CHECK 0x3C0
 #define ACTIV_WORD_CHECK 0x80
 #define CONTROLLER_WORD_CHECK 0x200
-
+*/
 #define GHOST_CAR_ID 6
 #define PACE_CAR_ID 7
 
@@ -222,6 +227,32 @@ void onControllerWordReceived(uint16_t word){
 }
 
 void onWordReceived(uint16_t word){
+	if((word >> CONTROLLER_WORD_CHECK) == 1){
+		if(word >> 6 != 0x0F){
+			onControllerWordReceived(word);
+		}
+	} else
+	if((word >> PROG_WORD_CHECK) == 1){
+		onProgramDataWordReceived(word);
+	} else
+	if((word >> ACTIV_WORD_CHECK) == 1){
+		onActiveControllerWordReceived(word);
+	}
+	/*
+	if((word & PACE_WORD_CHECK) == CONTROLLER_WORD_CHECK){
+		onControllerWordReceived(word);
+	} else
+	if((word & CONTROLLER_WORD_CHECK) == CONTROLLER_WORD_CHECK){
+		onControllerWordReceived(word);
+	} else
+	if((word & PROG_WORD_CHECK) == PROG_WORD_CHECK){
+		onProgramDataWordReceived(word);
+	} else
+	if((word & ACTIV_WORD_CHECK) == ACTIV_WORD_CHECK){
+		onActiveControllerWordReceived(word);
+	} 
+	*/
+	/*
 	if((word & PROG_WORD_CHECK) == PROG_WORD_CHECK){
 		sincWordIndex = 1;
 	}
@@ -253,6 +284,7 @@ void onWordReceived(uint16_t word){
 		}
 		sincWordIndex++;
 	}
+	*/
 }
 
 ISR(PCINT0_vect){
