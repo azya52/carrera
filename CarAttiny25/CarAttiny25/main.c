@@ -4,9 +4,20 @@
  * Created: 08.01.2018 15:27:24
  * Author : Alexander Zakharyan
  */ 
+
+#include <avr/io.h>
+#include <util/delay.h>
+#include <avr/interrupt.h>
+#include <avr/eeprom.h>
+#include <avr/sleep.h>
+#include <avr/power.h>
+
 #define TRACK_PIN PB4
 #define MOTOR_PIN PB1
 #define IRLED_PIN PB0
+#define NU_PIN1 PB2
+#define NU_PIN2 PB3
+#define NU_PIN3 PB5
 
 #define DBLCLICK_DELAY_MS 250 
 #define PACKET_LENGTH_MS 75
@@ -15,10 +26,10 @@
 #define TRANSM_FREQ 9800
 #define PERIOD_QURT_CICLES F_CPU/TRANSM_FREQ/4
 
-#define PROG_WORD_SIZE 12
-#define PACE_WORD_SIZE 9
-#define ACTIV_WORD_SIZE 7
-#define CONTROLLER_WORD_SIZE 9
+#define PROG_WORD_CHECK 0x1000
+#define PACE_WORD_CHECK 0x3C0
+#define ACTIV_WORD_CHECK 0x80
+#define CONTROLLER_WORD_CHECK 0x200
 
 #define GHOST_CAR_ID 6
 #define PACE_CAR_ID 7
@@ -26,13 +37,8 @@
 #define SHORT_TONE_MS 100
 #define LONG_TONE_MS 200
 
-#define MIN_CAR_SPEED_MULTIPLIER 4
+#define MIN_CAR_SPEED_MULTIPLIER 9
 #define MAX_CAR_SPEED_MULTIPLIER 14
-
-#include <avr/io.h>
-#include <util/delay.h>
-#include <avr/interrupt.h>
-#include <avr/eeprom.h> 
 
 uint8_t EEMEM eeprom_carID; 
 uint8_t EEMEM eeprom_progInNextPowerOn; 
@@ -50,13 +56,16 @@ uint8_t volatile progGhostMode = 0;
 uint8_t volatile progSpeedMode = 0;
 uint8_t volatile ghostSpeed = 0;
 uint8_t volatile speedMultiplier = 14;
+uint8_t volatile progSpeedSelecter = 0;
 
 void playTone(){
+	cli();
 	TCCR0B = 0<<WGM02 | 1<<CS01 | 1<<CS00; // div 64
 	OCR0B = 240;
-	_delay_ms(100);	
+	_delay_ms(150);	
 	OCR0B = 255;
 	TCCR0B = 0<<WGM02 | 1<<CS00; // no div
+	sei();
 }
 
 void timersInit() {
@@ -75,9 +84,14 @@ void startLEDPWM() {
 }
 
 void pinsInit() {
-	DDRB |= (1 << MOTOR_PIN);
-	DDRB |= (1 << IRLED_PIN);
-	DDRB &= ~ (1 << TRACK_PIN); //TRACK as input
+	DDRB = 0; //all as input
+	DDRB |= (1 << MOTOR_PIN); //MOTOR as output
+	DDRB |= (1 << IRLED_PIN); //IRLED as output
+	
+	PORTB &= (1 << TRACK_PIN); //PullUp TRACK
+	PORTB &= (1 << NU_PIN1); //PullUp not used pins
+	PORTB &= (1 << NU_PIN2); //PullUp not used pins
+	PORTB &= (1 << NU_PIN3); //PullUp not used pins
 }
 
 void interruptsInit(){
@@ -100,6 +114,7 @@ void setCarID(uint8_t newId){
 
 void stopProg() {
 	if(progSpeedMode){
+		speedMultiplier = MIN_CAR_SPEED_MULTIPLIER + progSpeedSelecter;
 		progSpeedMode = 0;
 		eeprom_write_byte(&eeprom_speedMultiplier, speedMultiplier);	
 	}
@@ -110,19 +125,20 @@ void stopProg() {
 
 void onDblClick(uint8_t controllerId, uint8_t clickCount){
 	if(progGhostMode) {
-		_delay_ms(50);
-		playTone();
-		_delay_ms(50);
-		progGhostMode = 0;
 		ghostSpeed = currentSpeed;
+		currentSpeed = 0;
+		progGhostMode = 0;
 		eeprom_write_byte(&eeprom_ghostSpeed, ghostSpeed);
 		setCarID(GHOST_CAR_ID);
+		playTone();
 	} else
 	if(progSpeedMode) {
 		playTone();
-		speedMultiplier+=2;
-		if(speedMultiplier>MAX_CAR_SPEED_MULTIPLIER){
-			speedMultiplier = MAX_CAR_SPEED_MULTIPLIER;
+		progSpeedSelecter++;
+		if(progSpeedSelecter==5){
+			_delay_ms(50);
+			playTone();
+			stopProg();
 		}
 	} else
 	if(clickCount>1 && currentSpeed==0){
@@ -135,7 +151,7 @@ void onDblClick(uint8_t controllerId, uint8_t clickCount){
 			} else
 			if(clickCount==3){
 				progSpeedMode = 1;
-				speedMultiplier = MIN_CAR_SPEED_MULTIPLIER;
+				progSpeedSelecter = 0;
 			} else
 			if(clickCount==4){
 				carID = controllerId;
@@ -173,22 +189,21 @@ void checkDblClick(uint8_t controllerId, uint8_t sw){
 }
 
 void onProgramDataWordReceived(uint16_t word){
-
 }
 
 void onActiveControllerWordReceived(uint16_t word){
-	uint8_t anyKeyPressed = word & 0x01;
+	uint8_t anyKeyPressed = word & 0x7F;
 	if(anyKeyPressed){
 		stopProg();
 	}
-	uint8_t currentKeyPressed = (word << carID) & 0x40;
+	uint8_t currentKeyPressed = (word << (carID & 0x0F)) & 0x40;
 	if(carID==GHOST_CAR_ID) {
-		if((OCR0B==255) && currentKeyPressed) {
+		if((currentSpeed==0) && anyKeyPressed) {
 			setCarSpeed(ghostSpeed);
 		}
 	} else {
 		if(currentKeyPressed){
-			if(OCR0B==255){
+			if(currentSpeed==0){
 				setCarSpeed(1);
 			}
 		} else {
@@ -207,7 +222,7 @@ void onControllerWordReceived(uint16_t word){
 }
 
 void onWordReceived(uint16_t word){
-	if(word>>PROG_WORD_SIZE == 1){
+	if((word & PROG_WORD_CHECK) == PROG_WORD_CHECK){
 		sincWordIndex = 1;
 	}
 	if(sincWordIndex>0){
@@ -216,18 +231,12 @@ void onWordReceived(uint16_t word){
 				onProgramDataWordReceived(word);
 				break;
 			case 2:
-				if(word>>PACE_WORD_SIZE != 1){
-					sincWordIndex = 0;
-					return;
-				}
 				break;
 			case 3:
 			case 9:
-				if(word>>ACTIV_WORD_SIZE != 1){
-					sincWordIndex = 0;
-					return;
+				if((word & ACTIV_WORD_CHECK) == ACTIV_WORD_CHECK){
+					onActiveControllerWordReceived(word);
 				}
-				onActiveControllerWordReceived(word);
 				break;
 			case 4:
 			case 5:
@@ -235,11 +244,9 @@ void onWordReceived(uint16_t word){
 			case 7:
 			case 8:
 			case 10:
-				if(word>>CONTROLLER_WORD_SIZE != 1){
-					sincWordIndex = 0;
-					return;
+				if((word & CONTROLLER_WORD_CHECK) == CONTROLLER_WORD_CHECK){
+					onControllerWordReceived(word);
 				}
-				onControllerWordReceived(word);
 				break;
 			default:
 				break;
@@ -295,14 +302,19 @@ int main(void) {
 		eeprom_write_byte(&eeprom_progInNextPowerOn,0);	
 	}
 	
-	ADCSRA = 0; //disable the ADC
+	power_adc_disable();
+	power_usi_disable();
+	//ADCSRA = 0; //disable the ADC
 
 	pinsInit();
 	timersInit();
 	startLEDPWM();
 	interruptsInit();
 	
+	set_sleep_mode(SLEEP_MODE_IDLE);
 	while (1) {
+		sleep_enable(); 
+		sleep_cpu(); 
 	}
 }
 
