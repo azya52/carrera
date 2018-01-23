@@ -30,12 +30,6 @@
 #define ACTIV_WORD_CHECK 7
 #define CONTROLLER_WORD_CHECK 9
 
-/*
-#define PROG_WORD_CHECK 0x1000
-#define PACE_WORD_CHECK 0x3C0
-#define ACTIV_WORD_CHECK 0x80
-#define CONTROLLER_WORD_CHECK 0x200
-*/
 #define GHOST_CAR_ID 6
 #define PACE_CAR_ID 7
 
@@ -62,6 +56,9 @@ uint8_t volatile progSpeedMode = 0;
 uint8_t volatile ghostSpeed = 0;
 uint8_t volatile speedMultiplier = 14;
 uint8_t volatile progSpeedSelecter = 0;
+
+uint8_t volatile lastControllerId;
+uint8_t volatile preControllerId[6] = {7,4,5,2,0,1};
 
 void playTone(){
 	cli();
@@ -197,6 +194,17 @@ void onProgramDataWordReceived(uint16_t word){
 }
 
 void onActiveControllerWordReceived(uint16_t word){
+
+	
+	uint8_t parity = word & 0xFE;
+	parity = parity^(parity>>4);
+	parity ^= parity>>2;
+	parity ^= parity>>1;
+	parity &= 0x01;
+	if(parity == (word & 0x01)){
+		return;
+	}
+	
 	uint8_t anyKeyPressed = word & 0x7F;
 	if(anyKeyPressed){
 		stopProg();
@@ -228,9 +236,18 @@ void onControllerWordReceived(uint16_t word){
 
 void onWordReceived(uint16_t word){
 	if((word >> CONTROLLER_WORD_CHECK) == 1){
-		if(word >> 6 != 0x0F){
+		if((word >> 6) != 0x0F){
 			onControllerWordReceived(word);
 		}
+		/*
+		uint8_t controllerId = (word >> 6) & 0x07;
+		if(lastControllerId == preControllerId[controllerId]){
+			if(controllerId<GHOST_CAR_ID){
+				onControllerWordReceived(word);
+			}
+			lastControllerId = controllerId;
+		}
+		*/
 	} else
 	if((word >> PROG_WORD_CHECK) == 1){
 		onProgramDataWordReceived(word);
