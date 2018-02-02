@@ -15,4 +15,6 @@ Reduced copy of the original decoder Carrera Digital 143.
 
 **v6** - a double sided variant, has a smaller size.
 
-![MiniCarreraDecoder v6 pcb](https://github.com/azya52/carrera/blob/master/Images/v6_top.png  =250x250 "MiniCarreraDecoder v6 pcb")
+<img src="https://github.com/azya52/carrera/blob/master/Images/v6_top.png" width="30%"><img src="https://github.com/azya52/carrera/blob/master/Images/v6_bottom.png" width="30%">
+
+<img src="https://github.com/azya52/carrera/blob/master/Images/example_0.jpg">
