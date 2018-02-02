@@ -1,9 +1,9 @@
 # CarAttiny25
-Carrera 143 car custom firmware. All functions work with standart Digital 143 Black Box. 
+Custom firmware for Carrera Digital 143 decoder. All functions work with standart Digital 143 Black Box. 
 
 Additional features:
 - Ghost car funciton,
-- Speed limit function.
+- Speed limit.
 
 I also plan to add support for the light.
 
