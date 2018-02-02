@@ -1,0 +1,46 @@
+*Pick And Place List
+*Company=
+*Author=
+*eMail=
+*
+*Project=CarMyPrefBoardSMDv6dl
+*Date=12:17:55
+*CreatedBy=Fritzing 0.9.3b.04.19.5c895d327c44a3114e5fcc9d8260daf0cbb52806
+*
+*
+*Coordinates in mm, always center of component
+*Origin 0/0=Lower left corner of PCB
+*Rotation in degree (0-360, math. pos.)
+*
+*No;Value;Package;X;Y;Rotation;Side;Name
+1;;sod-323;7.6646;-9.14533;-90;Top;D4
+2;;;5.3282;-15.1009;0;Bottom;Via7
+3;;;6.67034;-19.1181;0;Bottom;Via2
+4;0.1mF;100 mil [THT, electrolytic];1.15562;-12.5614;90;Bottom;C2
+5;;THT;8.46907;-1.18108;-90;Bottom;J4
+6;680;0603 [SMD];3.06653;-20.6323;-90;Top;R1
+7;;3 mm [THT];3.80622;-1.46598;0;Bottom;IR1
+8;;Melf DO-213 AA [SMD];6.84084;-19.1246;0;Top;D1
+9;;Melf DO-213 AA [SMD];6.83784;-21.4865;180;Top;D2
+10;;;1.10783;-9.94963;0;Bottom;TXT6
+11;;THT;8.47084;-15.6771;0;Bottom;JM
+12;137nF;0603 [SMD, multilayer];6.71612;-16.3687;-90;Top;C1
+13;390;0603 [SMD];6.59171;-1.65903;90;Top;R2
+14;100nF;0603 [SMD, multilayer];8.98256;-8.29351;90;Top;C3
+15;;;6.41199;-11.7033;0;Bottom;Via6
+16;;;4.07403;-5.0304;0;Bottom;Via5
+17;;;0.358425;-22.1621;0;Bottom;TXT13
+18;;;1.09206;-4.87979;0;Bottom;TXT8
+19;;;9.24967;-15.0648;0;Bottom;TXT11
+20;;sot23-3;3.98999;-16.4008;90;Top;U3
+21;;;8.44156;-2.27064;0;Bottom;TXT9
+22;;THT;1.07431;-5.02833;0;Bottom;J2
+23;;;1.07851;-7.43531;0;Bottom;TXT5
+24;;;1.05534;-17.5645;0;Bottom;TXT12
+25;;sod-323;8.97329;-11.6552;90;Top;D3
+26;;;1.08411;-2.33894;0;Bottom;TXT7
+27;;;8.29774;-4.84668;0;Bottom;Hole1
+28;;;8.45213;-3.04991;0;Top;TXT2
+29;;THT;1.07549;-18.9334;0;Bottom;JP
+30;;;2.94249;-18.2584;0;Bottom;Via4
+31;;so;4.69974;-10.0733;180;Top;U1
