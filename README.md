@@ -15,7 +15,7 @@ Reduced copy of the original decoder Carrera Digital 143.
 
 **v6** - a double sided variant, has a smaller size.
 
-src="https://github.com/azya52/carrera/blob/master/Images/v6_scheme.png" width="70%">
+<img src="https://github.com/azya52/carrera/blob/master/Images/v6_scheme.png" width="70%">
 
 * U1 - ATtiny25V-10SU (or ATtiny25-20SU)
 * U3 - IRLML2030TRPBF
