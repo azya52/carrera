@@ -15,13 +15,15 @@
 #define TRACK_PIN PB4
 #define MOTOR_PIN PB1
 #define IRLED_PIN PB0
+#define FRONTLIGHT_PIN PB3
 #define NU_PIN1 PB2
-#define NU_PIN2 PB3
 #define NU_PIN3 PB5
 
-#define DBLCLICK_DELAY_MS 250 
-#define PACKET_LENGTH_MS 75
-#define DBLCLICK_DELAY DBLCLICK_DELAY_MS/PACKET_LENGTH_MS
+#define PACKET_PERIOD_MS 75
+#define DBLCLICK_DELAY_MS 250
+#define DBLCLICK_DELAY DBLCLICK_DELAY_MS/PACKET_PERIOD_MS
+#define STOPBEFORELIGHT_DELAY_MS 3000
+#define STOPBEFORELIGHT_DELAY STOPBEFORELIGHT_DELAY_MS/PACKET_PERIOD_MS
 
 #define TRANSM_FREQ 9800
 #define PERIOD_QURT_CICLES F_CPU/TRANSM_FREQ/4
@@ -43,22 +45,22 @@ uint8_t EEMEM eeprom_carID;
 uint8_t EEMEM eeprom_progInNextPowerOn; 
 uint8_t EEMEM eeprom_ghostSpeed; 
 uint8_t EEMEM eeprom_speedMultiplier; 
+uint8_t EEMEM eeprom_frontLightOn;
 
 uint8_t volatile carID = 255;
 uint8_t volatile currentSpeed = 0;
 uint8_t volatile sincWordIndex = 0;
 uint8_t volatile doubleClickControllerId = 255;
 uint8_t volatile countClickSW = 0;
-uint8_t volatile countNotClickSW = 0;
+uint8_t volatile notClickSWTime = 0;
 uint8_t volatile progMode = 0;
 uint8_t volatile progGhostMode = 0;
 uint8_t volatile progSpeedMode = 0;
 uint8_t volatile ghostSpeed = 0;
 uint8_t volatile speedMultiplier = 14;
 uint8_t volatile progSpeedSelecter = 0;
-
-uint8_t volatile lastControllerId;
-uint8_t volatile preControllerId[6] = {7,4,5,2,0,1};
+uint8_t volatile frontLightOn = 0;
+uint8_t volatile stopTime = 0;
 
 void playTone(){
 	cli();
@@ -89,11 +91,11 @@ void pinsInit() {
 	DDRB = 0; //all as input
 	DDRB |= (1 << MOTOR_PIN); //MOTOR as output
 	DDRB |= (1 << IRLED_PIN); //IRLED as output
+	DDRB |= (1 << FRONTLIGHT_PIN); //FRONTLIGHT as output
 	
 	PORTB &= (1 << TRACK_PIN); //PullUp TRACK
-	PORTB &= (1 << NU_PIN1); //PullUp not used pins
-	PORTB &= (1 << NU_PIN2); //PullUp not used pins
-	PORTB &= (1 << NU_PIN3); //PullUp not used pins
+	PORTB |= (1 << NU_PIN1); //PullUp not used pins
+	PORTB |= (1 << NU_PIN3); //PullUp not used pins
 }
 
 void interruptsInit(){
@@ -114,22 +116,44 @@ void setCarID(uint8_t newId){
 	startLEDPWM();
 }
 
+void calcStopTime(uint8_t speed){
+	if(speed==0){
+		if(stopTime<255) {
+			stopTime++;
+		}
+	} else {
+		stopTime=0;
+	}
+}
+
+void setLights(){
+	//PORTB ^= PORTB ^ (frontLightOn & (1 << FRONTLIGHT_PIN));
+	PORTB &= ~(1 << FRONTLIGHT_PIN);
+	PORTB |= (frontLightOn & (1 << FRONTLIGHT_PIN));
+}
+
+void switchFrontLight(){
+	stopTime = STOPBEFORELIGHT_DELAY-DBLCLICK_DELAY;
+	frontLightOn = ~frontLightOn;
+	eeprom_write_byte(&eeprom_frontLightOn, frontLightOn);
+	setLights();
+}
+
 void stopProg() {
 	if(progSpeedMode){
 		speedMultiplier = MIN_CAR_SPEED_MULTIPLIER + progSpeedSelecter;
 		progSpeedMode = 0;
 		eeprom_write_byte(&eeprom_speedMultiplier, speedMultiplier);	
 	}
-	if(progMode){
-		progMode = 0;
-	}
+	progMode = 0;
 }
 
-void onDblClick(uint8_t controllerId, uint8_t clickCount){
+void onMultiClick(uint8_t controllerId, uint8_t clickCount){
 	if(progGhostMode) {
 		ghostSpeed = currentSpeed;
 		currentSpeed = 0;
 		progGhostMode = 0;
+		progMode = 0;
 		eeprom_write_byte(&eeprom_ghostSpeed, ghostSpeed);
 		setCarID(GHOST_CAR_ID);
 		playTone();
@@ -158,8 +182,9 @@ void onDblClick(uint8_t controllerId, uint8_t clickCount){
 			if(clickCount==4){
 				carID = controllerId;
 				progGhostMode = 1;
+			} else {
+				progMode = 0;
 			}
-			progMode = 0;
 		} else {
 			eeprom_write_byte(&eeprom_progInNextPowerOn,1);
 		}
@@ -169,13 +194,13 @@ void onDblClick(uint8_t controllerId, uint8_t clickCount){
 void checkDblClick(uint8_t controllerId, uint8_t sw){
 	if(sw){ //not pressed
 		if(controllerId==doubleClickControllerId){
-			if(countNotClickSW==0){
+			if(notClickSWTime==0){
 				countClickSW++;
 			}
-			if(countNotClickSW++>DBLCLICK_DELAY){
+			if(notClickSWTime++>DBLCLICK_DELAY){
 				doubleClickControllerId = 255;
 				if(countClickSW>0){
-					onDblClick(controllerId, countClickSW);
+					onMultiClick(controllerId, countClickSW);
 				}
 			}
 		}
@@ -185,7 +210,7 @@ void checkDblClick(uint8_t controllerId, uint8_t sw){
 			countClickSW = 0;
 		}
 		if(doubleClickControllerId == controllerId){
-			countNotClickSW = 0;
+			notClickSWTime = 0;
 		}
 	}
 }
@@ -194,8 +219,6 @@ void onProgramDataWordReceived(uint16_t word){
 }
 
 void onActiveControllerWordReceived(uint16_t word){
-
-	
 	uint8_t parity = word & 0xFE;
 	parity = parity^(parity>>4);
 	parity ^= parity>>2;
@@ -228,10 +251,15 @@ void onActiveControllerWordReceived(uint16_t word){
 void onControllerWordReceived(uint16_t word){
 	uint8_t controllerId = (word >> 6) & 0x07;
 	uint8_t speed = (word >> 1) & 0x0F;
+	uint8_t sw = (word>>5) & 1;
 	if(controllerId==carID){
 		setCarSpeed(speed);
+		calcStopTime(speed);
+		if(!sw && (stopTime>STOPBEFORELIGHT_DELAY) && !progMode){
+			switchFrontLight();
+		}
 	} 
-	checkDblClick(controllerId, (word>>5) & 1);
+	checkDblClick(controllerId, sw);
 }
 
 void onWordReceived(uint16_t word){
@@ -239,15 +267,6 @@ void onWordReceived(uint16_t word){
 		if((word >> 6) != 0x0F){
 			onControllerWordReceived(word);
 		}
-		/*
-		uint8_t controllerId = (word >> 6) & 0x07;
-		if(lastControllerId == preControllerId[controllerId]){
-			if(controllerId<GHOST_CAR_ID){
-				onControllerWordReceived(word);
-			}
-			lastControllerId = controllerId;
-		}
-		*/
 	} else
 	if((word >> PROG_WORD_CHECK) == 1){
 		onProgramDataWordReceived(word);
@@ -258,54 +277,11 @@ void onWordReceived(uint16_t word){
 	/*
 	if((word & PACE_WORD_CHECK) == CONTROLLER_WORD_CHECK){
 		onControllerWordReceived(word);
-	} else
-	if((word & CONTROLLER_WORD_CHECK) == CONTROLLER_WORD_CHECK){
-		onControllerWordReceived(word);
-	} else
-	if((word & PROG_WORD_CHECK) == PROG_WORD_CHECK){
-		onProgramDataWordReceived(word);
-	} else
-	if((word & ACTIV_WORD_CHECK) == ACTIV_WORD_CHECK){
-		onActiveControllerWordReceived(word);
 	} 
-	*/
-	/*
-	if((word & PROG_WORD_CHECK) == PROG_WORD_CHECK){
-		sincWordIndex = 1;
-	}
-	if(sincWordIndex>0){
-		switch(sincWordIndex){
-			case 1: 
-				onProgramDataWordReceived(word);
-				break;
-			case 2:
-				break;
-			case 3:
-			case 9:
-				if((word & ACTIV_WORD_CHECK) == ACTIV_WORD_CHECK){
-					onActiveControllerWordReceived(word);
-				}
-				break;
-			case 4:
-			case 5:
-			case 6:
-			case 7:
-			case 8:
-			case 10:
-				if((word & CONTROLLER_WORD_CHECK) == CONTROLLER_WORD_CHECK){
-					onControllerWordReceived(word);
-				}
-				break;
-			default:
-				break;
-		}
-		sincWordIndex++;
-	}
 	*/
 }
 
 ISR(PCINT0_vect){
-	//_delay_us(PERIOD_QURT_CICLES);
 	uint8_t start = TCNT0;
 	while ((uint8_t)(TCNT0-start) < PERIOD_QURT_CICLES);
 	start += PERIOD_QURT_CICLES;
@@ -314,7 +290,6 @@ ISR(PCINT0_vect){
 	uint16_t receivedValue = 0;
 	while(firstHalfCycle != secondHalfCycle) {
 		receivedValue = (receivedValue<<1) | firstHalfCycle;
-		//_delay_us(PERIOD_HALF_CICLES);
 
 		while ((uint8_t)(TCNT0-start) < PERIOD_QURT_CICLES);
 		start += PERIOD_QURT_CICLES;
@@ -322,7 +297,6 @@ ISR(PCINT0_vect){
 		start += PERIOD_QURT_CICLES;
 
 		firstHalfCycle = (PINB >> TRACK_PIN) & 1;
-		//_delay_us(PERIOD_HALF_CICLES);
 
 		while ((uint8_t)(TCNT0-start) < PERIOD_QURT_CICLES);
 		start += PERIOD_QURT_CICLES;
@@ -350,6 +324,7 @@ int main(void) {
 		}
 		eeprom_write_byte(&eeprom_progInNextPowerOn,0);	
 	}
+	frontLightOn = eeprom_read_byte(&eeprom_frontLightOn);
 	
 	power_adc_disable();
 	power_usi_disable();
@@ -358,6 +333,7 @@ int main(void) {
 	pinsInit();
 	timersInit();
 	startLEDPWM();
+	setLights();
 	interruptsInit();
 	
 	set_sleep_mode(SLEEP_MODE_IDLE);
