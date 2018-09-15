@@ -3,9 +3,10 @@ Custom firmware for Carrera Digital 143 decoder. All functions work with standar
 
 Additional features:
 - Ghost car funciton,
-- Speed limit.
+- Speed limit,
+- Front light support.
 
-I also plan to add support for the light.
+I also plan to add support for the stop light.
 
 
 # MiniCarreraDecoder
