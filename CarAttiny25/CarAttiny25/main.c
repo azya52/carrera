@@ -16,7 +16,7 @@
 #define MOTOR_PIN PB1
 #define IRLED_PIN PB0
 #define FRONTLIGHT_PIN PB3
-#define NU_PIN1 PB2
+#define STOPLIGHT_PIN PB2
 #define NU_PIN3 PB5
 
 #define PACKET_PERIOD_MS 75
@@ -24,6 +24,8 @@
 #define DBLCLICK_DELAY DBLCLICK_DELAY_MS/PACKET_PERIOD_MS
 #define STOPBEFORELIGHT_DELAY_MS 3000
 #define STOPBEFORELIGHT_DELAY STOPBEFORELIGHT_DELAY_MS/PACKET_PERIOD_MS
+#define STOPLIGHT_DELAY_MS 500
+#define STOPLIGHT_DELAY STOPLIGHT_DELAY_MS/PACKET_PERIOD_MS
 
 #define TRANSM_FREQ 9800
 #define PERIOD_QURT_CICLES F_CPU/TRANSM_FREQ/4
@@ -45,7 +47,7 @@ uint8_t EEMEM eeprom_carID;
 uint8_t EEMEM eeprom_progInNextPowerOn; 
 uint8_t EEMEM eeprom_ghostSpeed; 
 uint8_t EEMEM eeprom_speedMultiplier; 
-uint8_t EEMEM eeprom_frontLightOn;
+uint8_t EEMEM eeprom_lightOn;
 
 uint8_t volatile carID = 255;
 uint8_t volatile currentSpeed = 0;
@@ -59,8 +61,10 @@ uint8_t volatile progSpeedMode = 0;
 uint8_t volatile ghostSpeed = 0;
 uint8_t volatile speedMultiplier = 14;
 uint8_t volatile progSpeedSelecter = 0;
-uint8_t volatile frontLightOn = 0;
+uint8_t volatile lightOn = 0;
 uint8_t volatile stopTime = 0;
+uint8_t volatile stopLightTime = 0;
+uint8_t volatile lastSpeed = 0;
 
 void playTone(){
 	cli();
@@ -92,9 +96,9 @@ void pinsInit() {
 	DDRB |= (1 << MOTOR_PIN); //MOTOR as output
 	DDRB |= (1 << IRLED_PIN); //IRLED as output
 	DDRB |= (1 << FRONTLIGHT_PIN); //FRONTLIGHT as output
+	DDRB |= (1 << STOPLIGHT_PIN); //STOPLIGHT as output
 	
 	PORTB &= (1 << TRACK_PIN); //PullUp TRACK
-	PORTB |= (1 << NU_PIN1); //PullUp not used pins
 	PORTB |= (1 << NU_PIN3); //PullUp not used pins
 }
 
@@ -127,16 +131,37 @@ void calcStopTime(uint8_t speed){
 }
 
 void setLights(){
-	//PORTB ^= PORTB ^ (frontLightOn & (1 << FRONTLIGHT_PIN));
-	PORTB &= ~(1 << FRONTLIGHT_PIN);
-	PORTB |= (frontLightOn & (1 << FRONTLIGHT_PIN));
+	//PORTB ^= PORTB ^ (lightOn & (1 << FRONTLIGHT_PIN));
+	PORTB &= ~((1 << FRONTLIGHT_PIN) | (1 << STOPLIGHT_PIN));
+	PORTB |= (lightOn & ((1 << FRONTLIGHT_PIN) | (1 << STOPLIGHT_PIN)));
+}
+
+void blinkLights(){
+	PORTB ^= (1 << FRONTLIGHT_PIN);	
 }
 
 void switchFrontLight(){
 	stopTime = STOPBEFORELIGHT_DELAY-DBLCLICK_DELAY;
-	frontLightOn = ~frontLightOn;
-	eeprom_write_byte(&eeprom_frontLightOn, frontLightOn);
+	lightOn = ~lightOn;
+	eeprom_write_byte(&eeprom_lightOn, lightOn);
 	setLights();
+}
+
+void calcStopLightTime(uint8_t speed){
+	if(lastSpeed-speed>2){
+		stopLightTime = STOPLIGHT_DELAY;
+		setLights();
+	} else {
+		if(stopLightTime>0){
+			stopLightTime--;
+		}
+	}
+}
+
+void stopLightMiddleOn(){
+	if (lightOn && stopLightTime==0) {
+		PORTB ^= (1 << STOPLIGHT_PIN);
+	}
 }
 
 void stopProg() {
@@ -172,9 +197,6 @@ void onMultiClick(uint8_t controllerId, uint8_t clickCount){
 		if(progMode) {
 			_delay_ms(50);
 			playTone();
-			if(clickCount==2){
-				setCarID(controllerId);
-			} else
 			if(clickCount==3){
 				progSpeedMode = 1;
 				progSpeedSelecter = 0;
@@ -183,6 +205,7 @@ void onMultiClick(uint8_t controllerId, uint8_t clickCount){
 				carID = controllerId;
 				progGhostMode = 1;
 			} else {
+				setCarID(controllerId);
 				progMode = 0;
 			}
 		} else {
@@ -216,6 +239,7 @@ void checkDblClick(uint8_t controllerId, uint8_t sw){
 }
 
 void onProgramDataWordReceived(uint16_t word){
+
 }
 
 void onActiveControllerWordReceived(uint16_t word){
@@ -255,14 +279,17 @@ void onControllerWordReceived(uint16_t word){
 	if(controllerId==carID){
 		setCarSpeed(speed);
 		calcStopTime(speed);
+		calcStopLightTime(speed);
 		if(!sw && (stopTime>STOPBEFORELIGHT_DELAY) && !progMode){
 			switchFrontLight();
 		}
+		lastSpeed = speed;
 	} 
 	checkDblClick(controllerId, sw);
 }
 
 void onWordReceived(uint16_t word){
+	stopLightMiddleOn();
 	if((word >> CONTROLLER_WORD_CHECK) == 1){
 		if((word >> 6) != 0x0F){
 			onControllerWordReceived(word);
@@ -324,7 +351,7 @@ int main(void) {
 		}
 		eeprom_write_byte(&eeprom_progInNextPowerOn,0);	
 	}
-	frontLightOn = eeprom_read_byte(&eeprom_frontLightOn);
+	lightOn = eeprom_read_byte(&eeprom_lightOn);
 	
 	power_adc_disable();
 	power_usi_disable();
