@@ -92,13 +92,9 @@ void startLEDPWM() {
 }
 
 void pinsInit() {
-	DDRB = 0; //all as input
-	DDRB |= (1 << MOTOR_PIN); //MOTOR as output
-	DDRB |= (1 << IRLED_PIN); //IRLED as output
-	DDRB |= (1 << FRONTLIGHT_PIN); //FRONTLIGHT as output
-	DDRB |= (1 << STOPLIGHT_PIN); //STOPLIGHT as output
+	DDRB = (1 << MOTOR_PIN) | (1 << IRLED_PIN) | (1 << FRONTLIGHT_PIN) | (1 << STOPLIGHT_PIN); //sets as output
 	
-	PORTB &= (1 << TRACK_PIN); //PullUp TRACK
+	PORTB = (1 << TRACK_PIN); //PullUp TRACK
 	PORTB |= (1 << NU_PIN3); //PullUp not used pins
 }
 
