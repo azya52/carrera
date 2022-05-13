@@ -197,6 +197,9 @@ void onMultiClick(uint8_t controllerId, uint8_t clickCount){
 		if(progMode) {
 			_delay_ms(50);
 			playTone();
+			if(clickCount==2){
+				setCarID(controllerId);
+			} else
 			if(clickCount==3){
 				progSpeedMode = 1;
 				progSpeedSelecter = 0;
@@ -205,7 +208,6 @@ void onMultiClick(uint8_t controllerId, uint8_t clickCount){
 				carID = controllerId;
 				progGhostMode = 1;
 			} else {
-				setCarID(controllerId);
 				progMode = 0;
 			}
 		} else {
